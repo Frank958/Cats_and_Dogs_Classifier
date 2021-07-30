@@ -19,6 +19,10 @@ from keras import optimizers
 from keras.preprocessing.image import ImageDataGenerator
 from keras.preprocessing.image import img_to_array, load_img
 
+from keras.applications import InceptionResNetV2
+
+conv_base = InceptionResNetV2(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
+
 train_dir = 'C:\\Users\\phucp\\PycharmProjects\\Cats and Dogs Classifier\\train\\train'
 test_dir = 'C:\\Users\\phucp\\PycharmProjects\\Cats and Dogs Classifier\\test1\\test1'
 
@@ -80,20 +84,13 @@ nval = len(x_val)
 batch_size = 32
 
 model = models.Sequential()
-model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(128, (3, 3), activation='relu'))
-model.add(layers.MaxPooling2D((2, 2)))
+model.add(conv_base)
 model.add(layers.Flatten())
-model.add(layers.Dropout(0.5))
-model.add(layers.Dense(512, activation='relu'))
+model.add(layers.Dense(256, activation='relu'))
 model.add(layers.Dense(1, activation='sigmoid'))
+conv_base.trainable = False
 
-model.compile(loss='binary_crossentropy', optimizer=optimizers.rmsprop(lr=1e-4), metrics=['acc'])
+model.compile(loss='binary_crossentropy', optimizer=optimizers.rmsprop(lr=2e-5), metrics=['acc'])
 
 train_datagen = ImageDataGenerator(rescale=1. / 255,
                                    rotation_range=40,
@@ -101,14 +98,60 @@ train_datagen = ImageDataGenerator(rescale=1. / 255,
                                    height_shift_range=0.2,
                                    shear_range=0.2,
                                    zoom_range=0.2,
-                                   horizontal_flip=True, )
+                                   horizontal_flip=True,
+                                   fill_mode='nearest')
 val_datagen = ImageDataGenerator(rescale=1. / 255)
 
 train_generator = train_datagen.flow(x_train, y_train, batch_size=batch_size)
 val_generator = val_datagen.flow(x_val, y_val, batch_size=batch_size)
 
-history = model.fit(train_generator,
-                    steps_per_epoch=ntrain // batch_size,
-                    epochs=64,
-                    validation_data=val_generator,
-                    validation_steps=nval // batch_size)
+history = model.fit_generator(train_generator,
+                              steps_per_epoch=ntrain // batch_size,
+                              epochs=20,
+                              validation_data=val_generator,
+                              validation_steps=nval // batch_size)
+
+model.save_weights('model_wieghts.h5')
+model.save('model_keras.h5')
+
+acc = history.history['acc']
+val_acc = history.history['val_acc']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+epochs = range(1, len(acc) + 1)
+
+# train and validation accuracy
+plt.plot(epochs, acc, 'b', label='Training accurarcy')
+plt.plot(epochs, val_acc, 'r', label='Validation accurarcy')
+plt.title('Training and Validation accurarcy')
+plt.legend()
+
+plt.figure()
+# Train and validation loss
+plt.plot(epochs, loss, 'b', label='Training loss')
+plt.plot(epochs, val_loss, 'r', label='Validation loss')
+plt.title('Training and Validation loss')
+plt.legend()
+plt.savefig('4.png')
+
+X_test, y_test = read_and_process_image(test_imgs[0:10])  # Y_test in this case will be empty
+x = np.array(X_test)
+test_datagen = ImageDataGenerator(rescale=1. / 255)
+
+i = 0
+text_labels = []
+plt.figure(figsize=(30, 20))
+for batch in test_datagen.flow(x, batch_size=1):
+    pred = model.predict(batch)
+    if pred > 0.5:
+        text_labels.append('dog')
+    else:
+        text_labels.append('cat')
+    plt.subplot(5 / columns + 1, columns, i + 1)
+    plt.title('This is a ' + text_labels[i])
+    imgplot = plt.imshow(batch[0])
+    i += 1
+    if i % 10 == 0:
+        break
+plt.savefig('5.png')
